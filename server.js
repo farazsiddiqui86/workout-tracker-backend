@@ -1,48 +1,80 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 
 const app = express();
-const PORT = 3001; // Port for your backend server
+const PORT = 3001;
 
-app.use(cors()); // Allow cross-origin requests
-app.use(express.json()); // Allow server to accept JSON data
-
-const dbPath = path.join(__dirname, 'db.json');
-
-// Helper function to read from our JSON database
-const readDb = () => {
-  if (!fs.existsSync(dbPath)) {
-    return { workouts: [] };
+// --- Database Connection ---
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL, // Render provides this automatically
+  ssl: {
+    rejectUnauthorized: false
   }
-  const data = fs.readFileSync(dbPath);
-  return JSON.parse(data);
-};
+});
 
-// Helper function to write to our JSON database
-const writeDb = (data) => {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+// --- Middleware ---
+app.use(cors());
+app.use(express.json());
+
+// --- Helper Function to Create Table on Startup ---
+const setupDatabase = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS workouts (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        workout_type VARCHAR(255) NOT NULL,
+        exercises JSONB NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Database table is ready.');
+  } catch (err) {
+    console.error('Error setting up database table:', err);
+  } finally {
+    client.release();
+  }
 };
 
 // --- API ROUTES ---
 
 // GET all workouts
-app.get('/api/workouts', (req, res) => {
-  const db = readDb();
-  res.json(db.workouts);
+app.get('/api/workouts', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM workouts ORDER BY date DESC;');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
 });
 
 // POST a new workout
-app.post('/api/workouts', (req, res) => {
-  const db = readDb();
-  const newWorkout = { id: Date.now(), ...req.body }; // Add a unique ID
-  db.workouts.push(newWorkout);
-  writeDb(db);
-  res.status(201).json(newWorkout);
+app.post('/api/workouts', async (req, res) => {
+  const { date, workoutType, exercises } = req.body;
+  
+  // Basic validation
+  if (!date || !workoutType || !exercises) {
+    return res.status(400).send('Missing required fields.');
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO workouts (date, workout_type, exercises) VALUES ($1, $2, $3) RETURNING *;',
+      [date, workoutType, exercises]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
 });
 
+// --- Start Server ---
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  setupDatabase(); // Run the database setup
 });
