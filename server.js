@@ -70,9 +70,9 @@ app.post('/api/workouts', async (req, res) => {
   }
   try {
     const result = await pool.query(
-      'INSERT INTO workouts (date, workout_type, exercises) VALUES ($1, $2, $3) RETURNING *;',
-      [date, workoutType, exercises]
-    );
+  'INSERT INTO workouts (date, workout_type, exercises) VALUES ($1, $2, $3) RETURNING *;',
+  [date, workoutType, JSON.stringify(exercises)] // The change is here
+);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
