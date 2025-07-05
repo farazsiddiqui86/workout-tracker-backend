@@ -117,6 +117,22 @@ app.post('/api/exercises', async (req, res) => {
   }
 });
 
+// DELETE a specific workout
+app.delete('/api/workouts/:id', async (req, res) => {
+  const { id } = req.params; // Get the ID from the URL parameter
+  try {
+    const deleteOp = await pool.query('DELETE FROM workouts WHERE id = $1 RETURNING *;', [id]);
+    
+    if (deleteOp.rowCount > 0) {
+      res.status(200).send(`Workout with ID ${id} deleted.`);
+    } else {
+      res.status(404).send('Workout not found.');
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
 
 // --- Start Server ---
 app.listen(PORT, () => {
