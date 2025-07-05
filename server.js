@@ -134,6 +134,32 @@ app.delete('/api/workouts/:id', async (req, res) => {
   }
 });
 
+// PUT (update) a specific workout
+app.put('/api/workouts/:id', async (req, res) => {
+  const { id } = req.params;
+  const { date, workoutType, exercises } = req.body;
+
+  if (!date || !workoutType || !exercises) {
+    return res.status(400).send('Missing required fields.');
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE workouts SET date = $1, workout_type = $2, exercises = $3 WHERE id = $4 RETURNING *;',
+      [date, workoutType, JSON.stringify(exercises), id]
+    );
+
+    if (result.rowCount > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).send('Workout not found.');
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
 // --- Start Server ---
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
